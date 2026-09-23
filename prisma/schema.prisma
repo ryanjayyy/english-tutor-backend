@@ -1,0 +1,111 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum EnglishLevel {
+  A1
+  A2
+  B1
+  B2
+  C1
+}
+
+enum PracticeMode {
+  voice
+  chat
+}
+
+enum MessageRole {
+  user
+  assistant
+}
+
+enum MistakeType {
+  grammar
+  vocabulary
+  spelling
+  naturalness
+}
+
+model User {
+  id                String        @id @default(uuid())
+  name              String?
+  email             String?       @unique
+  passwordHash      String?
+  appleId           String?       @unique
+  googleId          String?       @unique
+  isGuest           Boolean       @default(false)
+  /// Level the user picked (or the latest estimate if they chose "I don't know my level").
+  englishLevel      EnglishLevel?
+  /// True when the user chose "I don't know my level"; the level is then estimated from conversations.
+  levelIsEstimated  Boolean       @default(false)
+  onboardingDone    Boolean       @default(false)
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  sessions          PracticeSession[]
+  mistakes          Mistake[]
+}
+
+model PracticeSession {
+  id        String       @id @default(uuid())
+  userId    String
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  topic     String
+  topicId   String?
+  /// Optional mistake category this session focuses on (from "practice this mistake").
+  focus     String?
+  mode      PracticeMode
+  level     EnglishLevel
+  startedAt DateTime     @default(now())
+  endedAt   DateTime?
+  messages  Message[]
+  mistakes  Mistake[]
+
+  @@index([userId, startedAt])
+}
+
+model Message {
+  id                 String          @id @default(uuid())
+  sessionId          String
+  session            PracticeSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  role               MessageRole
+  text               String
+  mode               PracticeMode?
+  timestamp          DateTime        @default(now())
+  /// Structured EnglishAnalysis JSON for user messages.
+  analysis           Json?
+  /// Pronunciation result JSON for voice messages.
+  pronunciation      Json?
+  wordCount          Int             @default(0)
+  speakingSeconds    Float           @default(0)
+  estimatedLevel     EnglishLevel?
+  grammarMistakes    Int             @default(0)
+  pronunciationScore Float?
+  mistakes           Mistake[]
+
+  @@index([sessionId, timestamp])
+}
+
+model Mistake {
+  id          String          @id @default(uuid())
+  userId      String
+  user        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sessionId   String
+  session     PracticeSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  messageId   String
+  message     Message         @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  original    String
+  corrected   String
+  type        MistakeType
+  category    String
+  explanation String
+  createdAt   DateTime        @default(now())
+
+  @@index([userId, category])
+  @@index([userId, createdAt])
+}
